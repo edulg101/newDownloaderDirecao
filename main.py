@@ -68,11 +68,6 @@ def start():
     pass_form = driver.find_element(By.XPATH, "//input[@placeholder='Senha']")
     pass_form.send_keys(password)
    
-    # direcao.click("//button[contains(., 'Aceitar e sair')]")
-
-    # driver.find_element(By.XPATH, "//button[contains(., 'Aceitar e sair')]").click()
-    # direcao.wait_for_page_load()
-
 
     button = driver.find_element(By.XPATH, "//button[@type='submit']")
     button.submit()
@@ -87,12 +82,9 @@ def start():
         sys.exit() 
 
     direcao.click("//button[contains(.,'Aceitar e sair')]")
-
-
     direcao.aulas = direcao.open_page_till_hamburger(course_url=direcao.disciplina_url)
-    
-    
     direcao.total_aulas = len(direcao.aulas) 
+
     for i in range(0, len(direcao.aulas), 1):
        
         sucess = direcao.click(element=direcao.aulas[i])
@@ -104,47 +96,33 @@ def start():
         next_class = direcao.aulas[i].find_element(By.XPATH, "following-sibling::*[1]")
         next_class_text = next_class.text
         if not (next_class_text.__contains__('Capítulo')):
-            suc = direcao.click(element=direcao.aulas[i])
-            print(suc)
+            direcao.click(element=direcao.aulas[i])
+            
         aula_name = direcao.aulas[i].text
         aula_name = aula_name.replace("\n", "-",-1)
         aula_name = direcao.check_file_name(text=aula_name)
         
         direcao.current_aula = aula_name
         
-        sucess = direcao.click(element=next_class)
+        success = direcao.click(element=next_class)
 
-        if not sucess:
+        if not success:
             print('deu merda recarregando página')
             direcao.driver.refresh()
             direcao.wait_for_page_load()
 
         if direcao.want_pdfs:
             ebook_button_elements = driver.find_elements(By.XPATH, "//button[@class='text']")
-
             direcao.click(element=ebook_button_elements[0])
-            
-
             aula_fullpath = os.path.join(direcao.root_path, direcao.disciplina_name,f'{aula_name}.pdf')
-
             direcao.download_pdf(aula_fullpath)
 
-        
-
-        # direcao.current_capitulo = next_class.text
-        # direcao.current_capitulo = direcao.current_capitulo.replace("\n", " - ")
-        # direcao.current_capitulo = direcao.check_file_name(direcao.current_capitulo)
-
-        # check if has videos
-        # while has NEXT
         
         direcao.wait_for_page_load()
 
         if direcao.want_videos:
             direcao.get_all_videos()
         
-        # get from "videos.txt"
-       
 
         if (i < len(direcao.aulas)-1):
             direcao.aulas = direcao.open_page_till_hamburger(direcao.disciplina_url)

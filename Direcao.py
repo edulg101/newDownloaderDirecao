@@ -34,8 +34,9 @@ class Direcao:
         #civil tcdf
         # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/63879f1818de1534665aab68/module/6387a2fb35dfc66e5c0ae5c5/lesson/6366e13868a6c724df91ce40/chapter/6366e13868a6c724df91ce37"
         # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d599907427002744814e/lesson/6377cdc28c0ed73e27582bcb/chapter/63778c6bf76d03031b72f141"
-        self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d51f3c629000222cf35a/lesson/63beb60f6bddcc0d4f4cdb99/chapter/63beb1d6aeeb6e0d5b9d1174"
-        self.root_path:str = ""
+        # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d51f3c629000222cf35a/lesson/63beb60f6bddcc0d4f4cdb99/chapter/63beb1d6aeeb6e0d5b9d1174"
+        self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d599907427002744814e/lesson/63778c6bf76d03031b72f14e/chapter/63778c6bf76d03031b72f14d"
+        self.root_path:str = "D:\\Users\\Eduardo\\OneDrive\\MeusConcursos\\SEFAZ\\Direcao"
         self.course = ""
         self.module = ""
         self.lesson = ""
@@ -171,7 +172,7 @@ class Direcao:
 
             bytes = f.write(r.content)
             if bytes > 0:
-                print(f'Arquivo path baixado com sucesso !')
+                print(f'Arquivo {file_path} baixado com sucesso !')
 
     def webDriverWaitByXpath(self, xpath: str, seconds=10):
         try:
@@ -324,8 +325,8 @@ class Direcao:
         
         def try_click(element:uc.webelement.WebElement)->bool:
             try:
-                sucess = element.click()
-                if sucess:
+                success = element.click()
+                if success:
                     self.wait_for_page_load()
                     return True
             except Exception as ex:
@@ -362,10 +363,7 @@ class Direcao:
     
     def get_all_videos(self):
         self.wait_for_page_load()
-        
-
         capitulo_index = 1
-        
         keep_going = True
         while keep_going :
 
@@ -400,20 +398,9 @@ class Direcao:
                     sys.exit()
             # myElem = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, 'IdOfMyElement')))
             video_button_elements = self.driver.find_elements(By.XPATH, "//button[@class='video']")
-
             
             if has_videos:
                 success = self.click(element=video_button_elements[0])
-
-            # if (success): has_videos = True
-            # try:
-            #     direcao.close_boxtool_once()
-            #     video_button_elements[0].click()
-            #     direcao.wait_for_page_load()
-            #     has_videos = True
-            # except Exception as ex:
-            #     print('entrou no exception')
-            #     has_videos = False
 
 
             print('hasvideos: ', has_videos)
@@ -467,11 +454,9 @@ class Direcao:
             next_button_text = next_button.text
             self.click(element=next_button)
             capitulo_index += 1
-            if (next_button_text.__contains__("Finalizar")):
-                keep_going = False
+            if (next_button_text.__contains__("Finalizar")): return
+                
 
-        # if (i < len(self.aulas)):
-        #     aulas = self.open_page_till_hamburger(self.disciplina_url)
 
         
         
