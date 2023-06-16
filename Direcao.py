@@ -2,19 +2,22 @@ import os
 import re
 import sys
 import undetected_chromedriver as uc
+from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.remote.webdriver import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.remote.webdriver import By
 from selenium.webdriver.support.wait import WebDriverWait
 import selenium.webdriver.support.expected_conditions as EC  # noqa
+import concurrent.futures
+import threading
+from threading import Thread
 import time
 import json
 import ls
+import data
 import requests
-import pprint
 from unidecode import unidecode
-import selenium
-from selenium import webdriver
+
 import logging
 
 
@@ -26,8 +29,7 @@ def get_link_from_src(src_source:str)->str:
 
 class Direcao:
 
-    def __init__(self, driver: uc.Chrome):
-        self.driver = driver
+    def __init__(self):
         self.disciplina_name:str
         #marcel
         # self.disciplina_url:str = "https://aluno.direcaoconcursos.com.br/course/63879f1818de1534665aab68/module/6387a3ad18de1534665b227e/lesson/637bd499db266a0b4afcedd5/chapter/637bd499db266a0b4afcedb6"
@@ -35,12 +37,13 @@ class Direcao:
         # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/63879f1818de1534665aab68/module/6387a2fb35dfc66e5c0ae5c5/lesson/6366e13868a6c724df91ce40/chapter/6366e13868a6c724df91ce37"
         # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d599907427002744814e/lesson/6377cdc28c0ed73e27582bcb/chapter/63778c6bf76d03031b72f141"
         # self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d51f3c629000222cf35a/lesson/63beb60f6bddcc0d4f4cdb99/chapter/63beb1d6aeeb6e0d5b9d1174"
-        self.disciplina_url:str ="https://aluno.direcaoconcursos.com.br/course/637169c709dd593cb1746bd7/module/6408d599907427002744814e/lesson/63778c6bf76d03031b72f14e/chapter/63778c6bf76d03031b72f14d"
-        self.root_path:str = "D:\\Users\\Eduardo\\OneDrive\\MeusConcursos\\SEFAZ\\Direcao"
+        self.disciplina_url:str = data.get_course_link()
+        self.root_path:str = data.get_root_path()
         self.course = ""
         self.module = ""
         self.lesson = ""
         self.aulas:list
+        self.start_aula_index = 17
         self.current_aula:str =""
         self.total_aulas:int = ""
         self.current_capitulo:str = ""
@@ -48,6 +51,13 @@ class Direcao:
         self.current_video_index:int
         self.want_videos:bool = True
         self.want_pdfs:bool = True
+        chrome_opt = webdriver.ChromeOptions()
+        prefs = {"credentials_enable_service": False,
+                 "profile.password_manager_enabled": False,
+        }
+        chrome_opt.add_argument('--password-store=basic --disable-popup-blocking')
+        chrome_opt.add_experimental_option("prefs",prefs)
+        self.driver = uc.Chrome(chrome_options=chrome_opt)
 
     def __len__(self):
         return self.driver.execute_script("return window.localStorage.length;")
@@ -86,7 +96,7 @@ class Direcao:
         return headers
     
     def check_if_has_pdf_or_video(self)->dict:
-            
+            self.wait_for_page_load()
             video_div = self.driver.find_elements(By.XPATH,'//button[@class="video"]')
             pdf_div = self.driver.find_elements(By.XPATH,'//button[@class="text"]')
             has_video = len(video_div) > 0
@@ -129,30 +139,34 @@ class Direcao:
         headers = self.get_headers()
 
         json_data = {
-            # 'course': '63879f1818de1534665aab68',
-            # 'module': '6387a3ad18de1534665b227e',
-            # 'lesson': '637bd499db266a0b4afcecee',
-
             'course': self.course,
             'module': self.module,
             'lesson': self.lesson,
         }
-        print("request pdf info:")
-        print('link: ',link)
-        print('headers:',headers)
-        print('json data:')
-        print(self.course)
-        print(self.lesson)
-        print(self.module)
-        
+        print("Requisitando link para baixar PDF ......")
 
         response = requests.post(link, headers=headers, json=json_data)
-        
+        if response.text.endswith('.pdf') or response.text.endswith('.PDF'):
+            print("link do arquivo PDF obtido com sucesso !!!")
+        else:
+            print("Não foi possível obter link do PDF Erro no site !!!")
 
         return response.text
+    
+    def download_all_videos(self, links):
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            executor.map(self.download_video, links)
 
-    def download_video(self, link: str, file_path: str):
 
+
+    def download_video(self, data):
+
+        data = data.split(sep="@@@")
+        link = data[0]
+        file_path = data[1]
+
+        
         if (os.path.exists(path=file_path)):
             print(f'Arquivo {file_path} já baixado. Não vou repetir')
             return False
@@ -180,8 +194,9 @@ class Direcao:
                 EC.presence_of_all_elements_located(
                     (By.XPATH, xpath))
             )
+            
         except Exception as e:
-            pass
+            print(e)
 
     
     
@@ -199,7 +214,7 @@ class Direcao:
             time.sleep(1)
             elements = self.driver.find_elements(By.XPATH, '//*[text()="Loading..."]')
             if (len(elements) < 1): 
-                time.sleep(1)
+                time.sleep(0.5)
                 
                 success = not self.check_if_page_has_problems_loading()
                 return True and success
@@ -209,7 +224,6 @@ class Direcao:
     def close_boxtool_once(self):
         try:
             self.webDriverWaitByXpath("//button[@class='closeButton']")
-            time.sleep(0.5)
             closeButton = self.driver.find_element(
                 By.XPATH, "//button[@class='closeButton']")
             closeButton.click()
@@ -258,15 +272,21 @@ class Direcao:
         if not (os.path.exists(folder)):
             os.makedirs(folder)
 
+        try:
+            link = self.get_download_link_pdf(file_path)
+            r = requests.get(link)
+            with open(file_path, 'wb') as f:
 
-        link = self.get_download_link_pdf(file_path)
-        r = requests.get(link)
-        with open(file_path, 'wb') as f:
-
-            bytes = f.write(r.content)
-            if bytes > 0:
-                print(f'Arquivo {file_path} baixado com sucesso !')
-    
+                bytes = f.write(r.content)
+                if bytes > 0:
+                    print(f'Arquivo {file_path} baixado com sucesso !')
+        except Exception as ex:
+            print(ex)
+            array_path = file_path.split(sep=".pdf")
+            new_file_path = f'{array_path[0]}.txt'
+            with open(new_file_path, 'a') as f:
+                f.writelines(f'{new_file_path} --> deu merda -- {self.current_aula}')
+                f.writelines(f'link para a aula: {self.driver.current_url}')
     
     def check_file_name(self, text)->str:
         text = unidecode(text)
@@ -283,6 +303,18 @@ class Direcao:
             self.close_boxtool()
             boxes = self.driver.find_elements(By.XPATH,'//div[@id="headlessui-popover-panel-:r1:"]')
 
+    def wait_element_to_be_clickable(self, by:str, desc):
+        wait = WebDriverWait(self.driver, 20)
+        by = by.upper()
+        element = ''
+        if by == 'XPATH':
+            element = wait.until(EC.element_to_be_clickable((By.XPATH, desc)))
+        if by == 'ID':
+            element = wait.until(EC.element_to_be_clickable((By.ID, desc)))
+        if by == 'LINK_TEXT':
+            element = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, desc)))
+        return element
+    
     def open_page_till_hamburger(self, course_url:str):
         logging.warning('entrou no hamburger')
         driver = self.driver
@@ -291,7 +323,17 @@ class Direcao:
         driver.get(course_url)
         # direcao.wait_for_page_load()
         logging.warning('entrou no hamburger click')
+
+        element = self.wait_element_to_be_clickable("xpath", "//button[@class='hamburguerButton']")
         direcao.click("//button[@class='hamburguerButton']")
+        
+        # WebDriverWait(self.driver, 20).until(
+        #         EC.presence_of_element_located(By.XPATH, "//button[@class='hamburguerButton']"))
+        
+        # WebDriverWait(self.driver, 20).until(
+        #         EC.element_to_be_clickable(By.XPATH, "//button[@class='hamburguerButton']"))
+        
+        
         logging.warning('saiu do click do hamburger ')
 
         # direcao.webDriverWaitByXpath("//button[@class='closeButton']", 3)
@@ -304,8 +346,9 @@ class Direcao:
         
         
         
-        # direcao.check_for_box_tool()
+        direcao.check_for_box_tool()
 
+        direcao.webDriverWaitByXpath('//*[@id="root"]/div[4]/div[2]/div[1]/div[1]/div[2]/h3', 10)
 
         direcao.disciplina_name = direcao.driver.find_element(By.XPATH, '//*[@id="root"]/div[4]/div[2]/div[1]/div[1]/div[2]/h3').text
         
@@ -325,13 +368,13 @@ class Direcao:
         
         def try_click(element:uc.webelement.WebElement)->bool:
             try:
-                success = element.click()
-                if success:
-                    self.wait_for_page_load()
-                    return True
+                element.click()
+                return True
             except Exception as ex:
-                return False
+                pass
             try:
+                # alterandoDiv = self.driver.find_element(By.XPATH, "//button[contains(.,'Alterando')]")
+                print("trancou no alterando")
                 self.wait_for_page_load()
                 success = not self.check_if_page_has_problems_loading()
                 print('problem Loading:', success)
@@ -363,7 +406,7 @@ class Direcao:
     
     def get_all_videos(self):
         self.wait_for_page_load()
-        capitulo_index = 1
+        self.current_capitulo_index = 1
         keep_going = True
         while keep_going :
 
@@ -377,12 +420,13 @@ class Direcao:
                 print('aqui.')
 
             self.current_capitulo = self.check_file_name(self.current_capitulo)
-            self.current_capitulo = f'{capitulo_index:02d} - {self.current_capitulo}'
+            self.current_capitulo = f'{self.current_capitulo_index:02d} - {self.current_capitulo}'
 
             print('capitulo:')
             print(self.current_capitulo)
 
             self.close_boxtool_once()
+
             next_button = self.driver.find_element(By.XPATH, "//button[@class='last']")
             
             has_videos = self.check_if_has_pdf_or_video()['video']
@@ -391,41 +435,52 @@ class Direcao:
 
             if not success:
                 self.driver.refresh()
+                print('dei um refresh na pagina')
+                page_loaded = self.wait_for_page_load()
                 has_videos = self.check_if_has_pdf_or_video()['video']
-                success = self.wait_for_page_load() and not self.check_if_page_has_problems_loading()
+                success = page_loaded and not self.check_if_page_has_problems_loading()
                 if not success:
                     print('deu merda no page load')
                     sys.exit()
             # myElem = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, 'IdOfMyElement')))
             video_button_elements = self.driver.find_elements(By.XPATH, "//button[@class='video']")
             
-            if has_videos:
-                success = self.click(element=video_button_elements[0])
-
 
             print('hasvideos: ', has_videos)
-            print('capitulo:', capitulo_index)
+            print('capitulo:', self.current_capitulo_index)
             print('capitulo name:', self.current_capitulo)
 
             print('has video??', has_videos)
-
+            
+            thread = Thread()
+            
             if (has_videos):
+                video_button = self.wait_element_to_be_clickable("xpath", "//button[@class='video']")
+                success = self.click(element=video_button)
+                while not success:
+                    success = self.click(element=video_button)
 
-                video_button = self.driver.find_element(By.XPATH, "//button[@class='video']") 
+                # success = self.click(element=video_button_elements[0])
+
+                # video_button = self.driver.find_element(By.XPATH, "//button[@class='video']") 
 
                 videos_class = self.driver.find_element(By.XPATH, "//div[@class='keen-slider']")
 
                 # get all videos array from videos_class
                 videos = videos_class.find_elements(By.XPATH, './div')
+                video_tuple_list = list()
                 video_index = 1
+
+                print('Thread Alive? ', thread.is_alive())
+
+                if thread.is_alive(): thread.join()
+
                 for i, video in enumerate(videos):
                     print('entrou no videos')
                     # find img src from video div
                     child = video.find_element(By.XPATH,'./div')  
 
                     video_name = child.text
-                    print('videoname:')
-                    print(video_name)
                     if len(video_name) < 1:
                         video_name = f'{video_index:02d}'
                     video_name = self.check_file_name(video_name)
@@ -441,19 +496,28 @@ class Direcao:
 
                     full_videolink_to_download = f'https://videodelivery.direcaoconcursos.com.br/{link}.mp4'
 
-                    full_video_name = f'{capitulo_index:02d}-{video_name}.mp4'
+                    full_video_name = f'{self.current_capitulo_index:02d}-{video_name}.mp4'
 
                     video_path = os.path.join(self.root_path, self.disciplina_name,self.current_aula, full_video_name)
                     
-                    self.download_video(full_videolink_to_download, video_path)
+                    video_tuple_list.append((full_videolink_to_download, video_path))
+                    # self.download_video(full_videolink_to_download, video_path)
 
                     video_index += 1
+                new_list = list()
+                for v in video_tuple_list:
+                     new_list.append(f'{v[0]}@@@{v[1]}')
+                thread = Thread(target = self.download_all_videos, args = (new_list,))
+                
+                thread.start()
+                
 
+                # self.download_all_videos(video_tuple_list)
             next_button = self.driver.find_element(By.XPATH, "//button[@class='last']")
         
             next_button_text = next_button.text
             self.click(element=next_button)
-            capitulo_index += 1
+            self.current_capitulo_index += 1
             if (next_button_text.__contains__("Finalizar")): return
                 
 
